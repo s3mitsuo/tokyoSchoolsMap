@@ -1,0 +1,664 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>東京都教育施設マップ</title>
+    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+    <link rel="stylesheet" href="https://unpkg.com/leaflet.markercluster@1.5.3/dist/MarkerCluster.css" />
+    <link rel="stylesheet" href="https://unpkg.com/leaflet.markercluster@1.5.3/dist/MarkerCluster.Default.css" />
+    <link href="https://fonts.googleapis.com/css2?family=Noto+Sans+JP:wght@300;500;700;900&family=Staatliches&display=swap" rel="stylesheet">
+    <style>
+        :root {
+            --primary: #1a1a2e;
+            --secondary: #16213e;
+            --accent: #e94560;
+            --accent-light: #ff6b88;
+            --text: #f1f1f1;
+            --text-dim: #a0a0a0;
+            --panel-bg: rgba(26, 26, 46, 0.95);
+            --border: rgba(233, 69, 96, 0.3);
+        }
+
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: 'Noto Sans JP', sans-serif;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: var(--text);
+            overflow: hidden;
+            height: 100vh;
+        }
+
+        #app {
+            display: grid;
+            grid-template-columns: 380px 1fr;
+            height: 100vh;
+            position: relative;
+        }
+
+        /* サイドパネル */
+        #sidebar {
+            background: var(--panel-bg);
+            border-right: 2px solid var(--border);
+            display: flex;
+            flex-direction: column;
+            backdrop-filter: blur(20px);
+            z-index: 1000;
+            box-shadow: 4px 0 30px rgba(0, 0, 0, 0.5);
+        }
+
+        #header {
+            padding: 32px 28px;
+            background: linear-gradient(135deg, var(--accent), var(--accent-light));
+            border-bottom: 3px solid var(--accent);
+            position: relative;
+            overflow: hidden;
+        }
+
+        #header::before {
+            content: '';
+            position: absolute;
+            top: -50%;
+            right: -20%;
+            width: 200px;
+            height: 200px;
+            background: radial-gradient(circle, rgba(255, 255, 255, 0.1), transparent);
+            border-radius: 50%;
+            animation: float 6s ease-in-out infinite;
+        }
+
+        @keyframes float {
+            0%, 100% { transform: translate(0, 0) scale(1); }
+            50% { transform: translate(-20px, -20px) scale(1.1); }
+        }
+
+        h1 {
+            font-family: 'Staatliches', cursive;
+            font-size: 32px;
+            letter-spacing: 2px;
+            text-transform: uppercase;
+            color: #fff;
+            text-shadow: 2px 2px 8px rgba(0, 0, 0, 0.3);
+            margin-bottom: 8px;
+            position: relative;
+            z-index: 1;
+        }
+
+        .subtitle {
+            font-size: 13px;
+            font-weight: 300;
+            color: rgba(255, 255, 255, 0.9);
+            letter-spacing: 1px;
+            position: relative;
+            z-index: 1;
+        }
+
+        #controls {
+            padding: 24px 28px;
+            flex-grow: 1;
+            overflow-y: auto;
+        }
+
+        .filter-group {
+            margin-bottom: 28px;
+            animation: slideIn 0.6s ease-out backwards;
+        }
+
+        .filter-group:nth-child(1) { animation-delay: 0.1s; }
+        .filter-group:nth-child(2) { animation-delay: 0.2s; }
+        .filter-group:nth-child(3) { animation-delay: 0.3s; }
+
+        @keyframes slideIn {
+            from {
+                opacity: 0;
+                transform: translateX(-20px);
+            }
+            to {
+                opacity: 1;
+                transform: translateX(0);
+            }
+        }
+
+        .filter-label {
+            font-size: 11px;
+            font-weight: 700;
+            text-transform: uppercase;
+            letter-spacing: 1.5px;
+            color: var(--accent);
+            margin-bottom: 12px;
+            display: block;
+        }
+
+        .checkbox-group {
+            display: grid;
+            gap: 10px;
+        }
+
+        .checkbox-item {
+            display: flex;
+            align-items: center;
+            padding: 12px 16px;
+            background: rgba(255, 255, 255, 0.03);
+            border: 1px solid rgba(255, 255, 255, 0.08);
+            border-radius: 8px;
+            cursor: pointer;
+            transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+            position: relative;
+            overflow: hidden;
+        }
+
+        .checkbox-item::before {
+            content: '';
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 0;
+            height: 100%;
+            background: linear-gradient(90deg, transparent, rgba(233, 69, 96, 0.1));
+            transition: width 0.4s ease;
+        }
+
+        .checkbox-item:hover {
+            background: rgba(255, 255, 255, 0.06);
+            border-color: var(--accent);
+            transform: translateX(4px);
+        }
+
+        .checkbox-item:hover::before {
+            width: 100%;
+        }
+
+        .checkbox-item input[type="checkbox"] {
+            width: 20px;
+            height: 20px;
+            margin-right: 12px;
+            cursor: pointer;
+            accent-color: var(--accent);
+        }
+
+        .checkbox-item label {
+            font-size: 14px;
+            font-weight: 500;
+            cursor: pointer;
+            flex-grow: 1;
+            position: relative;
+            z-index: 1;
+        }
+
+        .count {
+            font-size: 12px;
+            color: var(--text-dim);
+            font-weight: 300;
+            margin-left: auto;
+            padding-left: 12px;
+        }
+
+        #stats {
+            padding: 20px 28px;
+            background: rgba(233, 69, 96, 0.1);
+            border-top: 2px solid var(--border);
+        }
+
+        .stat-item {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 10px;
+        }
+
+        .stat-item:last-child {
+            margin-bottom: 0;
+        }
+
+        .stat-label {
+            font-size: 13px;
+            color: var(--text-dim);
+            font-weight: 300;
+        }
+
+        .stat-value {
+            font-size: 20px;
+            font-weight: 900;
+            color: var(--accent-light);
+            font-family: 'Staatliches', cursive;
+            letter-spacing: 1px;
+        }
+
+        /* マップコンテナ */
+        #map {
+            height: 100vh;
+            position: relative;
+        }
+
+        /* カスタムポップアップ */
+        .leaflet-popup-content-wrapper {
+            background: var(--panel-bg);
+            color: var(--text);
+            border-radius: 12px;
+            padding: 0;
+            box-shadow: 0 8px 32px rgba(0, 0, 0, 0.5);
+            border: 1px solid var(--border);
+        }
+
+        .leaflet-popup-content {
+            margin: 0;
+            padding: 20px;
+            min-width: 280px;
+        }
+
+        .popup-title {
+            font-size: 18px;
+            font-weight: 700;
+            color: var(--accent-light);
+            margin-bottom: 12px;
+            line-height: 1.4;
+        }
+
+        .popup-info {
+            font-size: 14px;
+            line-height: 1.8;
+            color: var(--text);
+        }
+
+        .popup-info strong {
+            color: var(--accent);
+            font-weight: 500;
+        }
+
+        .leaflet-popup-tip {
+            background: var(--panel-bg);
+            border: 1px solid var(--border);
+        }
+
+        /* カスタムマーカークラスタ */
+        .marker-cluster {
+            background: linear-gradient(135deg, rgba(233, 69, 96, 0.8), rgba(255, 107, 136, 0.8));
+            border: 3px solid rgba(255, 255, 255, 0.4);
+            border-radius: 50%;
+            color: white;
+            font-weight: 900;
+            text-align: center;
+            font-family: 'Staatliches', cursive;
+            box-shadow: 0 4px 12px rgba(233, 69, 96, 0.5);
+        }
+
+        .marker-cluster div {
+            background: transparent;
+            color: white;
+            font-size: 16px;
+            line-height: 1;
+        }
+
+        /* ローディング */
+        #loading {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            display: flex;
+            flex-direction: column;
+            justify-content: center;
+            align-items: center;
+            z-index: 9999;
+            transition: opacity 0.5s ease, visibility 0.5s ease;
+        }
+
+        #loading.hidden {
+            opacity: 0;
+            visibility: hidden;
+        }
+
+        .spinner {
+            width: 60px;
+            height: 60px;
+            border: 4px solid rgba(233, 69, 96, 0.2);
+            border-top: 4px solid var(--accent);
+            border-radius: 50%;
+            animation: spin 1s linear infinite;
+            margin-bottom: 24px;
+        }
+
+        @keyframes spin {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
+        }
+
+        .loading-text {
+            font-size: 18px;
+            font-weight: 500;
+            color: var(--text);
+            letter-spacing: 2px;
+        }
+
+        /* レスポンシブ */
+        @media (max-width: 1024px) {
+            #app {
+                grid-template-columns: 1fr;
+                grid-template-rows: auto 1fr;
+            }
+
+            #sidebar {
+                border-right: none;
+                border-bottom: 2px solid var(--border);
+                max-height: 50vh;
+            }
+
+            #controls {
+                max-height: 40vh;
+            }
+        }
+
+        /* スクロールバーカスタマイズ */
+        #controls::-webkit-scrollbar {
+            width: 8px;
+        }
+
+        #controls::-webkit-scrollbar-track {
+            background: rgba(255, 255, 255, 0.05);
+            border-radius: 4px;
+        }
+
+        #controls::-webkit-scrollbar-thumb {
+            background: var(--accent);
+            border-radius: 4px;
+        }
+
+        #controls::-webkit-scrollbar-thumb:hover {
+            background: var(--accent-light);
+        }
+    </style>
+</head>
+<body>
+    <div id="loading">
+        <div class="spinner"></div>
+        <div class="loading-text">Loading Map Data...</div>
+    </div>
+
+    <div id="app">
+        <div id="sidebar">
+            <div id="header">
+                <h1>Tokyo Schools</h1>
+                <div class="subtitle">教育施設マップビューア</div>
+            </div>
+            
+            <div id="controls">
+                <div class="filter-group">
+                    <span class="filter-label">施設種別</span>
+                    <div id="facilityFilters" class="checkbox-group"></div>
+                </div>
+                
+                <div class="filter-group">
+                    <span class="filter-label">設置者区分</span>
+                    <div id="ownerFilters" class="checkbox-group"></div>
+                </div>
+            </div>
+            
+            <div id="stats">
+                <div class="stat-item">
+                    <span class="stat-label">表示中の施設</span>
+                    <span class="stat-value" id="visibleCount">0</span>
+                </div>
+                <div class="stat-item">
+                    <span class="stat-label">総施設数</span>
+                    <span class="stat-value" id="totalCount">0</span>
+                </div>
+            </div>
+        </div>
+        
+        <div id="map"></div>
+    </div>
+
+    <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+    <script src="https://unpkg.com/leaflet.markercluster@1.5.3/dist/leaflet.markercluster.js"></script>
+    
+    <script>
+        // Leafletライブラリの読み込みを待つ
+        window.addEventListener('load', function() {
+            initializeApp();
+        });
+
+        function initializeApp() {
+        // 施設種別コード定義
+        const facilityTypes = {
+            '16001': '小学校',
+            '16002': '中学校',
+            '16003': '中等教育学校',
+            '16004': '高等学校',
+            '16005': '高等専門学校',
+            '16006': '短期大学',
+            '16007': '大学',
+            '16011': '幼稚園',
+            '16012': '特別支援学校',
+            '16013': '幼保連携型認定こども園',
+            '16014': '義務教育学校',
+            '16015': '各種学校',
+            '16016': '専修学校'
+        };
+
+        // 設置者区分
+        const ownerTypes = {
+            '1': '国立',
+            '2': '公立',
+            '3': '公立',
+            '4': '私立'
+        };
+
+        // マーカーカラー
+        const facilityColors = {
+            '16001': '#2E7D32',  // 小学校 - 濃い緑
+            '16002': '#1565C0',  // 中学校 - 濃い青
+            '16003': '#00838F',  // 中等教育学校 - 濃いシアン
+            '16004': '#EF6C00',  // 高等学校 - 濃いオレンジ
+            '16005': '#6A1B9A',  // 高等専門学校 - 濃い紫
+            '16006': '#C2185B',  // 短期大学 - 濃いピンク
+            '16007': '#C62828',  // 大学 - 濃い赤
+            '16011': '#F9A825',  // 幼稚園 - 濃い黄色
+            '16012': '#4E342E',  // 特別支援学校 - 濃い茶色
+            '16013': '#558B2F',  // 幼保連携型認定こども園 - 濃い黄緑
+            '16014': '#283593',  // 義務教育学校 - 濃いインディゴ
+            '16015': '#455A64',  // 各種学校 - 濃いグレー
+            '16016': '#D84315'   // 専修学校 - 濃いディープオレンジ
+        };
+
+        let map;
+        let markersLayer;
+        let geojsonData;
+        let allMarkers = [];
+
+        // 地図初期化
+        function initMap() {
+            map = L.map('map').setView([35.6812, 139.7671], 11);
+            
+            L.tileLayer('https://{s}.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}{r}.png', {
+                attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors &copy; <a href="https://carto.com/attributions">CARTO</a>',
+                subdomains: 'abcd',
+                maxZoom: 20
+            }).addTo(map);
+
+            markersLayer = L.markerClusterGroup({
+                maxClusterRadius: 50,
+                iconCreateFunction: function(cluster) {
+                    const count = cluster.getChildCount();
+                    return L.divIcon({
+                        html: '<div>' + count + '</div>',
+                        className: 'marker-cluster',
+                        iconSize: L.point(40, 40)
+                    });
+                }
+            });
+        }
+
+        // GeoJSONデータ読み込み
+        async function loadGeoJSON() {
+            try {
+                const response = await fetch('P29-23_13.geojson');
+                geojsonData = await response.json();
+                processData();
+                hideLoading();
+            } catch (error) {
+                console.error('GeoJSONの読み込みに失敗しました:', error);
+                alert('GeoJSONファイルの読み込みに失敗しました。同じフォルダに P29-23_13.geojson があることを確認してください。');
+                hideLoading();
+            }
+        }
+
+        // データ処理
+        function processData() {
+            const facilityCounts = {};
+            const ownerCounts = {};
+
+            geojsonData.features.forEach(feature => {
+                const props = feature.properties;
+                const facilityCode = props.P29_003;
+                const ownerCode = props.P29_006;
+
+                facilityCounts[facilityCode] = (facilityCounts[facilityCode] || 0) + 1;
+                ownerCounts[ownerCode] = (ownerCounts[ownerCode] || 0) + 1;
+
+                const marker = createMarker(feature);
+                allMarkers.push({
+                    marker: marker,
+                    facilityCode: facilityCode,
+                    ownerCode: ownerCode
+                });
+            });
+
+            createFilters(facilityCounts, ownerCounts);
+            updateMap();
+            updateStats();
+        }
+
+        // マーカー作成
+        function createMarker(feature) {
+            const props = feature.properties;
+            const coords = feature.geometry.coordinates;
+            const facilityCode = props.P29_003;
+            const color = facilityColors[facilityCode] || '#999';
+
+            const marker = L.circleMarker([coords[1], coords[0]], {
+                radius: 6,
+                fillColor: color,
+                color: '#fff',
+                weight: 2,
+                opacity: 1,
+                fillOpacity: 0.8
+            });
+
+            const campusInfo = props.P29_009 ? `<br><strong>キャンパス:</strong> ${props.P29_009}` : '';
+            const popupContent = `
+                <div class="popup-title">${props.P29_004}</div>
+                <div class="popup-info">
+                    <strong>種別:</strong> ${facilityTypes[facilityCode] || '不明'}<br>
+                    <strong>住所:</strong> ${props.P29_005}<br>
+                    <strong>設置者:</strong> ${ownerTypes[props.P29_006] || '不明'}${campusInfo}
+                </div>
+            `;
+            marker.bindPopup(popupContent);
+
+            return marker;
+        }
+
+        // フィルター作成
+        function createFilters(facilityCounts, ownerCounts) {
+            const facilityContainer = document.getElementById('facilityFilters');
+            const ownerContainer = document.getElementById('ownerFilters');
+
+            // 施設種別フィルター
+            Object.entries(facilityTypes).forEach(([code, name]) => {
+                const count = facilityCounts[code] || 0;
+                if (count > 0) {
+                    const div = document.createElement('div');
+                    div.className = 'checkbox-item';
+                    div.innerHTML = `
+                        <input type="checkbox" id="facility-${code}" value="${code}" checked>
+                        <label for="facility-${code}">${name}</label>
+                        <span class="count">${count}</span>
+                    `;
+                    div.addEventListener('click', function(e) {
+                        if (e.target.tagName !== 'INPUT') {
+                            const checkbox = this.querySelector('input');
+                            checkbox.checked = !checkbox.checked;
+                            updateMap();
+                        }
+                    });
+                    div.querySelector('input').addEventListener('change', updateMap);
+                    facilityContainer.appendChild(div);
+                }
+            });
+
+            // 設置者区分フィルター
+            Object.entries(ownerTypes).forEach(([code, name]) => {
+                const count = ownerCounts[code] || 0;
+                if (count > 0) {
+                    const div = document.createElement('div');
+                    div.className = 'checkbox-item';
+                    div.innerHTML = `
+                        <input type="checkbox" id="owner-${code}" value="${code}" checked>
+                        <label for="owner-${code}">${name}</label>
+                        <span class="count">${count}</span>
+                    `;
+                    div.addEventListener('click', function(e) {
+                        if (e.target.tagName !== 'INPUT') {
+                            const checkbox = this.querySelector('input');
+                            checkbox.checked = !checkbox.checked;
+                            updateMap();
+                        }
+                    });
+                    div.querySelector('input').addEventListener('change', updateMap);
+                    ownerContainer.appendChild(div);
+                }
+            });
+        }
+
+        // マップ更新
+        function updateMap() {
+            markersLayer.clearLayers();
+
+            const selectedFacilities = Array.from(
+                document.querySelectorAll('#facilityFilters input:checked')
+            ).map(el => el.value);
+
+            const selectedOwners = Array.from(
+                document.querySelectorAll('#ownerFilters input:checked')
+            ).map(el => el.value);
+
+            let visibleCount = 0;
+            allMarkers.forEach(item => {
+                if (selectedFacilities.includes(item.facilityCode) && 
+                    selectedOwners.includes(item.ownerCode)) {
+                    markersLayer.addLayer(item.marker);
+                    visibleCount++;
+                }
+            });
+
+            map.addLayer(markersLayer);
+            document.getElementById('visibleCount').textContent = visibleCount;
+        }
+
+        // 統計情報更新
+        function updateStats() {
+            document.getElementById('totalCount').textContent = allMarkers.length;
+            document.getElementById('visibleCount').textContent = allMarkers.length;
+        }
+
+        // ローディング非表示
+        function hideLoading() {
+            setTimeout(() => {
+                document.getElementById('loading').classList.add('hidden');
+            }, 500);
+        }
+
+        // 初期化
+        initMap();
+        loadGeoJSON();
+        }
+    </script>
+</body>
+</html>
